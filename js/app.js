@@ -103,26 +103,40 @@
         <div class="section" id="sec-ladder">
           <div class="section-head"><h2>🧭 按学习成本选路线</h2><span>不用纠结哪个最强，愿意花多少学习时间就选哪条路</span></div>
           <div class="ladder">
-            <div class="ladder-card now">
+            <div class="ladder-card now tappable" id="lv-1" title="点击去模板库选一个开始">
               <span class="lv-tag">你现在在这里</span>
               <div class="lv">第 1 站 · 零安装零配置</div>
               <h3>💧 先用小流把想法跑通</h3>
               <p>双击网页就能用：模板改改、说句话就生成。先看到东西跑起来，再谈工具强弱。</p>
+              <div class="ladder-acts">
+                <button class="btn primary" type="button">去模板库选一个 →</button>
+              </div>
             </div>
             <div class="ladder-card">
               <div class="lv">第 2 站 · 稍微学一点</div>
               <h3>🔗 要串起真实工具 → Make / n8n</h3>
               <p>邮箱、日历、Notion、表格随便连。Make 界面对新手更友好；n8n 开源可自托管，上限更高、数据在自己手里。</p>
+              <div class="ladder-acts">
+                <a class="btn" href="https://www.make.com" target="_blank" rel="noopener">Make 官网 ↗</a>
+                <a class="btn" href="https://n8n.io" target="_blank" rel="noopener">n8n 官网 ↗</a>
+              </div>
             </div>
             <div class="ladder-card">
               <div class="lv">第 3 站 · 完全不想碰技术</div>
               <h3>📮 想发布到微信 / 飞书 → 扣子 Coze</h3>
               <p>注册即用、拖拽操作，30 分钟出 Bot。代价是灵活性有限、生态绑定平台——但「先跑起来」完全够用。</p>
+              <div class="ladder-acts">
+                <a class="btn" href="https://www.coze.cn" target="_blank" rel="noopener">扣子 Coze 官网 ↗</a>
+              </div>
             </div>
             <div class="ladder-card">
               <div class="lv">支线 · 整理自己的文档笔记</div>
               <h3>📒 Obsidian + AI 助手</h3>
               <p>比一上来就上 Dify 更务实；Dify 适合要建 RAG 知识库并对外提供服务的场景。</p>
+              <div class="ladder-acts">
+                <a class="btn" href="https://obsidian.md" target="_blank" rel="noopener">Obsidian 官网 ↗</a>
+                <a class="btn" href="https://dify.ai" target="_blank" rel="noopener">Dify 官网 ↗</a>
+              </div>
             </div>
           </div>
         </div>
@@ -172,6 +186,11 @@
       toast(`已添加「${tpl.name}」，去画布看看吧`);
       location.hash = '#/edit/' + wf.id;
     });
+
+    // 学习成本阶梯：第 1 站整卡可点 → 平滑滚到模板库（按钮点击会冒泡到这里，无需重复绑定）
+    const lv1 = document.getElementById('lv-1');
+    if (lv1) lv1.addEventListener('click', () =>
+      document.getElementById('sec-tpl').scrollIntoView({ behavior: 'smooth' }));
 
     app.querySelectorAll('.my-card').forEach(card => {
       const id = card.dataset.id;

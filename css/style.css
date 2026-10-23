@@ -164,10 +164,27 @@ input, select, textarea { font-family: inherit; font-size: 14px; }
   box-shadow: var(--shadow);
   display: flex; flex-direction: column; gap: 8px;
   position: relative;
+  transition: transform .15s, box-shadow .15s, border-color .15s;
+}
+.ladder-card.tappable { cursor: pointer; }
+.ladder-card.tappable:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-lg);
+  border-color: #99f6e4;
 }
 .ladder-card .lv { font-size: 12px; font-weight: 600; color: var(--primary-deep); }
 .ladder-card h3 { font-size: 15px; line-height: 1.4; }
 .ladder-card p { color: var(--muted); font-size: 13px; flex: 1; }
+.ladder-acts {
+  display: flex; gap: 8px; flex-wrap: wrap;
+  margin-top: auto; padding-top: 6px;
+}
+.ladder-acts .btn {
+  padding: 8px 14px; font-size: 13px;
+  text-decoration: none; white-space: nowrap;
+}
+.ladder-acts .btn:hover { border-color: #cbd5e1; background: #fafafa; }
+.ladder-acts .btn.primary:hover { background: #0f766e; border-color: #0f766e; }
 .ladder-card.now {
   border-color: #5eead4;
   background: linear-gradient(160deg, #f0fdfa 0%, #ffffff 70%);
@@ -559,6 +576,7 @@ input, select, textarea { font-family: inherit; font-size: 14px; }
 
   .ladder { grid-template-columns: 1fr; gap: 12px; }
   .ladder-card { padding: 14px; }
+  .ladder-acts .btn { padding: 11px 14px; min-height: 42px; }
 
   .my-card .ops .btn { flex: 1; text-align: center; justify-content: center; }
 
