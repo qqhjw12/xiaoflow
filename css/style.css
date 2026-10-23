@@ -223,6 +223,15 @@ input, select, textarea { font-family: inherit; font-size: 14px; }
 .runlog .rl-time { font-size: 12px; font-weight: 400; color: var(--faint); }
 .runlog .rl-text { font-size: 12px; color: var(--muted); margin-top: 4px; word-break: break-all; }
 
+/* 投递箱 */
+.inbox-list { display: flex; flex-direction: column; gap: 10px; }
+.inbox-item {
+  border: 1px solid var(--line); border-radius: 12px;
+  padding: 10px 14px; background: #fff;
+}
+.inbox-item .ii-meta { font-size: 12px; color: var(--faint); margin-bottom: 4px; }
+.inbox-item .ii-text { font-size: 13px; color: var(--ink); word-break: break-all; white-space: pre-wrap; }
+
 /* 设置弹层 */
 .modal-body code {
   background: var(--bg); border: 1px solid var(--line);

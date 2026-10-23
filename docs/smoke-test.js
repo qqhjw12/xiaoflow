@@ -7,6 +7,7 @@ require('../js/store.js');
 require('../js/notify.js');
 require('../js/ollama.js');
 require('../js/scheduler.js');
+require('../js/inbox.js');
 
 let pass = 0, fail = 0;
 function check(name, cond, extra) {
@@ -140,6 +141,67 @@ function check(name, cond, extra) {
   check('fire 触发通知（回退路径）', fb2 && fb2.title.includes('小流'), fb2 && fb2.title);
   const lg = XF.scheduler.logs(5);
   check('fire 写入运行记录', lg.length > 0 && lg[0].name === weekly.name && lg[0].ok === true);
+
+  console.log('== 8. 投递服务（手机随时扔） ==');
+  const http = require('http');
+  const inboxServer = require('../tools/inbox-server.js');
+  // 起一个随机端口的真实服务，避免占用默认 8787
+  const server = http.createServer(inboxServer.createHandler());
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  const port = server.address().port;
+  const api = (p, opts) => fetch('http://127.0.0.1:' + port + p, opts);
+
+  inboxServer.inbox.clear();
+  let r1 = await api('/api/drop', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text: '周一修了三个 bug', source: 'test' })
+  });
+  let j1 = await r1.json();
+  check('POST /api/drop 投递成功', r1.status === 200 && j1.ok && j1.total === 1, JSON.stringify(j1));
+
+  r1 = await api('/drop?text=' + encodeURIComponent('微信里分享的一条') + '&source=share');
+  j1 = await r1.json();
+  check('GET /drop 投递成功（快捷指令用）', r1.status === 200 && j1.ok && j1.total === 2);
+
+  r1 = await api('/api/drop', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text: '   ' })
+  });
+  check('空内容返回 400', r1.status === 400);
+
+  r1 = await api('/api/inbox');
+  j1 = await r1.json();
+  check('GET /api/inbox 返回全部（新的在前）',
+    j1.total === 2 && j1.items[0].text === '微信里分享的一条' && j1.items[1].text === '周一修了三个 bug',
+    JSON.stringify(j1.items.map(x => x.text)));
+
+  r1 = await api('/');
+  const html = await r1.text();
+  check('GET / 返回手机网页', html.includes('扔进小流') && html.includes('viewport'));
+
+  r1 = await api('/nope');
+  check('未知路径 404', r1.status === 404);
+
+  // CORS 头（file:// 页面读取需要）
+  r1 = await api('/api/inbox');
+  check('响应带 CORS 头', (r1.headers.get('access-control-allow-origin') || '') === '*');
+
+  // 小流侧客户端模块（指向测试服务的随机端口）
+  XF.inbox.setPort(port);
+  const items = await XF.inbox.list();
+  check('XF.inbox.list 拉到真实服务数据', items.length === 2 && items[0].text === '微信里分享的一条');
+  const merged = XF.inbox.mergeText(items);
+  check('mergeText 合并为可读文本', merged.includes('周一修了三个 bug') && merged.includes('微信里分享的一条'));
+  check('inbox.label 标注来源', /test|未知/.test(XF.inbox.label(items[1])), XF.inbox.label(items[1]));
+
+  await XF.inbox.clear();
+  check('XF.inbox.clear 消费后为空', (await api('/api/inbox')).status === 200 && (await (await api('/api/inbox')).json()).total === 0);
+  // 持久化文件可重复读取
+  inboxServer.inbox.drop('第二条持久化测试', 'test');
+  server.close();
+  const inboxServer2 = require('../tools/inbox-server.js');
+  check('重启后数据仍在（持久化）', inboxServer2.inbox.count() === 1 && inboxServer2.inbox.list()[0].text === '第二条持久化测试');
+  inboxServer2.inbox.clear();
 
   console.log(`\n结果：${pass} 通过，${fail} 失败`);
   process.exit(fail ? 1 : 0);

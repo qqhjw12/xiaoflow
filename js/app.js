@@ -4,13 +4,14 @@
 (function () {
   const XF = window.XF;
   const { NODE_DEFS, CATEGORIES, TEMPLATES, store, parsePrompt, runWorkflow, createCanvas, newWorkflow } = XF;
-  const { notify, scheduler, ollama } = XF;
+  const { notify, scheduler, ollama, inbox } = XF;
   const app = document.getElementById('app');
 
   let current = null;   // 正在编辑的工作流
   let canvas = null;    // 画布控制器
   let saveTimer = null;
   let running = false;
+  let pendingInbox = ''; // 从投递箱带入、待试运行消耗的内容
 
   /* ---------- 工具 ---------- */
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
@@ -199,6 +200,7 @@
           <span class="save-hint" id="save-hint"></span>
           <div class="spacer" style="flex:1"></div>
           <button class="live-chip" id="btn-live" title="开启后，只要页面开着，到时间就自动跑"></button>
+          <button class="btn" id="btn-inbox">📬 投递箱</button>
           <button class="btn" id="btn-notify">🔔 通知</button>
           <button class="btn" id="btn-settings">⚙ 设置</button>
           <button class="btn" id="btn-export">📤 导出</button>
@@ -251,6 +253,7 @@
     document.getElementById('btn-ai').onclick = openAI;
     document.getElementById('btn-run').onclick = openRun;
     document.getElementById('btn-settings').onclick = openSettings;
+    document.getElementById('btn-inbox').onclick = openInbox;
     document.getElementById('btn-live').onclick = toggleLive;
     document.getElementById('btn-notify').onclick = async () => {
       const st = notify.state();
@@ -357,6 +360,14 @@
           </div>
           <hr style="border:none;border-top:1px solid var(--line);margin:18px 0">
           <div class="field">
+            <label>📬 投递服务端口</label>
+            <div style="display:flex;gap:10px;align-items:center">
+              <input type="number" id="set-inbox-port" value="${inbox.getPort()}" style="width:110px" min="1" max="65535">
+              <span style="font-size:12px;color:var(--faint)">默认 8787；启动时用了别的端口就改这里</span>
+            </div>
+          </div>
+          <hr style="border:none;border-top:1px solid var(--line);margin:18px 0">
+          <div class="field">
             <label>📋 运行记录</label>
             <div style="font-size:13px;color:var(--muted)">正式运行触发过的工作流会记在这里（本机保存，最多 50 条）。</div>
             <div style="display:flex;gap:10px;margin-top:8px">
@@ -394,6 +405,7 @@
         url: mask.querySelector('#set-ai-url').value.trim() || ollama.DEF.url,
         model: mask.querySelector('#set-ai-model').value.trim() || ollama.DEF.model
       });
+      inbox.setPort(mask.querySelector('#set-inbox-port').value);
       close();
       toast(ollama.ready() ? '✓ 已保存，AI 节点会优先用本机模型' : '已保存（本机 AI 未启用，继续用模拟回答）');
     };
@@ -584,6 +596,79 @@
   }
 
   /* ============================================================
+   * 投递箱（手机"随时扔"的入口）
+   * ============================================================ */
+  function openInbox() {
+    const mask = document.createElement('div');
+    mask.className = 'modal-mask';
+    mask.innerHTML = `
+      <div class="modal" style="max-width:560px">
+        <div class="modal-head"><span>📬</span><h3>投递箱</h3><button class="x">✕</button></div>
+        <div class="modal-body" id="inbox-body"><div class="prop-empty">正在连接本机投递服务…</div></div>
+        <div class="modal-foot">
+          <span style="flex:1;font-size:12px;color:var(--faint)">服务未启动时：在项目目录运行 <code>node tools/inbox-server.js</code></span>
+          <button class="btn" id="inbox-close">关闭</button>
+        </div>
+      </div>`;
+    document.body.appendChild(mask);
+    const close = () => mask.remove();
+    mask.querySelector('.x').onclick = close;
+    mask.querySelector('#inbox-close').onclick = close;
+    mask.addEventListener('pointerdown', e => { if (e.target === mask) close(); });
+
+    const box = mask.querySelector('#inbox-body');
+    const render = async () => {
+      let items = [];
+      try {
+        items = await inbox.list();
+      } catch (e) {
+        box.innerHTML = `
+          <div class="prop-empty" style="padding:24px 0">
+            📭 还没连上投递服务<br>
+            <span style="font-size:12px">在项目目录运行 <code>node tools/inbox-server.js</code>，<br>
+            然后手机连同一 WiFi 打开提示的地址，就能随时扔了</span>
+          </div>`;
+        return;
+      }
+      if (!items.length) {
+        box.innerHTML = `
+          <div class="prop-empty" style="padding:24px 0">
+            ✅ 服务正常，收集箱空空如也<br>
+            <span style="font-size:12px">手机网页或系统分享扔一条进来试试？</span>
+          </div>`;
+        return;
+      }
+      box.innerHTML = `
+        <div class="ai-hero">📱 手机扔进来 <b>${items.length}</b> 条，读入小流一起处理吧</div>
+        <div class="inbox-list">
+          ${items.map(x => `
+            <div class="inbox-item">
+              <div class="ii-meta">${esc(inbox.label(x))}</div>
+              <div class="ii-text">${esc(trunc(x.text, 120))}</div>
+            </div>`).join('')}
+        </div>`;
+      const foot = document.createElement('div');
+      foot.style.cssText = 'display:flex;gap:10px;margin-top:14px';
+      foot.innerHTML = `
+        <button class="btn primary" style="flex:1" id="inbox-take">↘ 带入试运行</button>
+        <button class="btn ghost" id="inbox-clear">🗑 清空</button>`;
+      box.appendChild(foot);
+      mask.querySelector('#inbox-take').onclick = async () => {
+        pendingInbox = inbox.mergeText(items);
+        await inbox.clear();
+        toast(`✓ 已带入 ${items.length} 条投递，去点「试运行」吧`);
+        close();
+      };
+      mask.querySelector('#inbox-clear').onclick = async () => {
+        await inbox.clear();
+        toast('投递箱已清空');
+        render();
+      };
+    };
+    render();
+  }
+
+  /* ============================================================
    * 试运行
    * ============================================================ */
   function openRun() {
@@ -655,9 +740,12 @@
 
     if (collects.length) {
       const c = collects[0];
+      const prefill = pendingInbox;
+      pendingInbox = '';
       box.innerHTML = `
-        <div class="ai-hero">📮 这个流程要从「${esc(c.name)}」开始——先随手扔点内容进去吧</div>
-        <textarea class="ai-input" id="run-input" placeholder="${esc(c.cfg.hint || '随手扔点内容…')}"></textarea>
+        <div class="ai-hero">📮 这个流程要从「${esc(c.name)}」开始——先随手扔点内容进去吧
+          ${prefill ? `<br><b>已带入 ${prefill.split('\\n').length} 条手机投递</b>，可以直接开始，也能再改改` : ''}</div>
+        <textarea class="ai-input" id="run-input" placeholder="${esc(c.cfg.hint || '随手扔点内容…')}">${esc(prefill)}</textarea>
         <div style="display:flex;gap:10px;align-items:center;margin-top:12px">
           <label class="btn" for="run-file" title="支持 .txt / .md，内容会追加到上面">📎 从文件导入</label>
           <input type="file" id="run-file" accept=".txt,.md,text/plain,text/markdown" style="display:none">
