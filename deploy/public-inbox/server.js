@@ -307,5 +307,6 @@ function start(port) {
 module.exports = { inbox, createHandler, start, page, DATA_FILE, MAX_LEN, MAX_ITEMS, RATE_LIMIT_MS };
 
 if (require.main === module) {
-  start(Number(process.argv[2]) || 0);
+  // 命令行给了端口就用它；没给则交给 start() 读 PORT 环境变量（发布沙箱会注入）
+  start(process.argv[2]);
 }
