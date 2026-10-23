@@ -201,6 +201,8 @@
           <input class="wf-name" id="wf-name" value="${esc(wf.name)}" maxlength="20" />
           <span class="save-hint" id="save-hint"></span>
           <div class="spacer" style="flex:1"></div>
+          <button class="btn only-m" id="btn-pal" title="节点库">🧰 节点</button>
+          <button class="btn only-m" id="btn-prop" title="属性">⚙️ 属性</button>
           <button class="live-chip" id="btn-live" title="开启后，只要页面开着，到时间就自动跑"></button>
           <button class="btn" id="btn-inbox">📬 投递箱</button>
           <button class="btn" id="btn-notify">🔔 通知</button>
@@ -242,7 +244,7 @@
     /* 画布 */
     canvas = createCanvas(document.getElementById('canvas-host'));
     canvas.setWorkflow(clone(wf));
-    canvas.on('select', sel => renderProp(sel));
+    canvas.on('select', sel => { renderProp(sel); closeSheets(); });
     canvas.on('change', scheduleSave);
 
     /* 顶栏 */
@@ -257,6 +259,8 @@
     document.getElementById('btn-settings').onclick = openSettings;
     document.getElementById('btn-inbox').onclick = openInbox;
     document.getElementById('btn-live').onclick = toggleLive;
+    document.getElementById('btn-pal').onclick = () => toggleSheet('palette');
+    document.getElementById('btn-prop').onclick = () => toggleSheet('prop');
     document.getElementById('btn-notify').onclick = async () => {
       const st = notify.state();
       if (st === 'granted') { toast('系统通知已经开着啦'); return; }
@@ -270,6 +274,30 @@
     updateSaveHint(true);
     updateNotifyBtn();
     updateLiveUI();
+  }
+
+  /* ---------- 移动端底部面板（节点库 / 属性） ---------- */
+  function toggleSheet(which) {
+    const pal = document.getElementById('palette');
+    const prop = document.getElementById('prop');
+    if (!pal || !prop) return;
+    const target = which === 'palette' ? pal : prop;
+    const willOpen = !target.classList.contains('open');
+    pal.classList.remove('open');
+    prop.classList.remove('open');
+    document.getElementById('btn-pal').classList.toggle('active', willOpen && which === 'palette');
+    document.getElementById('btn-prop').classList.toggle('active', willOpen && which === 'prop');
+    if (willOpen) target.classList.add('open');
+  }
+  function closeSheets() {
+    const pal = document.getElementById('palette');
+    const prop = document.getElementById('prop');
+    if (pal) pal.classList.remove('open');
+    if (prop) prop.classList.remove('open');
+    const b1 = document.getElementById('btn-pal');
+    const b2 = document.getElementById('btn-prop');
+    if (b1) b1.classList.remove('active');
+    if (b2) b2.classList.remove('active');
   }
 
   /* ---------- 正式运行开关 ---------- */
@@ -368,6 +396,13 @@
               <span style="font-size:12px;color:var(--faint)">默认 8787；启动时用了别的端口就改这里</span>
             </div>
           </div>
+          <div class="field">
+            <label>📬 投递服务地址（高级）</label>
+            <div style="display:flex;gap:10px;align-items:center">
+              <input type="text" id="set-inbox-host" value="${esc(inbox.getSavedHost())}" style="width:150px" placeholder="留空 = 自动判断">
+              <span style="font-size:12px;color:var(--faint)">电脑上打开留空即可；只有手动指定过才需要填</span>
+            </div>
+          </div>
           <hr style="border:none;border-top:1px solid var(--line);margin:18px 0">
           <div class="field">
             <label>📋 运行记录</label>
@@ -408,6 +443,7 @@
         model: mask.querySelector('#set-ai-model').value.trim() || ollama.DEF.model
       });
       inbox.setPort(mask.querySelector('#set-inbox-port').value);
+      inbox.setHost(mask.querySelector('#set-inbox-host').value);
       close();
       toast(ollama.ready() ? '✓ 已保存，AI 节点会优先用本机模型' : '已保存（本机 AI 未启用，继续用模拟回答）');
     };
@@ -639,7 +675,7 @@
         <div class="modal-head"><span>📬</span><h3>投递箱</h3><button class="x">✕</button></div>
         <div class="modal-body" id="inbox-body"><div class="prop-empty">正在连接本机投递服务…</div></div>
         <div class="modal-foot">
-          <span style="flex:1;font-size:12px;color:var(--faint)">服务未启动时：在项目目录运行 <code>node tools/inbox-server.js</code></span>
+          <span style="flex:1;font-size:12px;color:var(--faint)">正在连接 <code>${esc(inbox.base())}</code><br>服务未启动时：在项目目录运行 <code>node tools/inbox-server.js</code></span>
           <button class="btn" id="inbox-close">关闭</button>
         </div>
       </div>`;

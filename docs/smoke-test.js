@@ -203,6 +203,24 @@ function check(name, cond, extra) {
   check('重启后数据仍在（持久化）', inboxServer2.inbox.count() === 1 && inboxServer2.inbox.list()[0].text === '第二条持久化测试');
   inboxServer2.inbox.clear();
 
+  console.log('== 9. 投递箱主机自动判断（手机访问） ==');
+  // Node 环境无 location → 默认 127.0.0.1（电脑 file:// 场景）
+  check('无 location 时默认 127.0.0.1', XF.inbox.getHost() === '127.0.0.1', XF.inbox.getHost());
+  // 模拟 http 页面访问（手机连 WiFi 打开 192.168.x.x）
+  global.location = { protocol: 'http:', hostname: '192.168.0.102' };
+  check('http 页面自动用当前主机名（手机访问连到电脑）', XF.inbox.getHost() === '192.168.0.102', XF.inbox.getHost());
+  check('base() 拼出可访问地址', XF.inbox.base() === 'http://192.168.0.102:' + XF.inbox.getPort(), XF.inbox.base());
+  // localhost 访问不特殊化
+  global.location = { protocol: 'http:', hostname: 'localhost' };
+  check('localhost 访问仍走 127.0.0.1', XF.inbox.getHost() === '127.0.0.1', XF.inbox.getHost());
+  // 显式设置优先
+  XF.inbox.setHost('10.0.0.5');
+  check('显式设置的主机优先', XF.inbox.getHost() === '10.0.0.5', XF.inbox.getHost());
+  check('getSavedHost 返回显式值', XF.inbox.getSavedHost() === '10.0.0.5');
+  XF.inbox.setHost('');
+  check('清空后恢复自动判断', XF.inbox.getHost() === '127.0.0.1' && XF.inbox.getSavedHost() === '');
+  delete global.location;
+
   console.log(`\n结果：${pass} 通过，${fail} 失败`);
   process.exit(fail ? 1 : 0);
 })().catch(e => { console.error('测试崩溃:', e); process.exit(1); });

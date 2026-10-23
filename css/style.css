@@ -87,6 +87,7 @@ input, select, textarea { font-family: inherit; font-size: 14px; }
 .btn:disabled { opacity: .5; cursor: not-allowed; }
 .btn.danger { background: #ef4444; border-color: #ef4444; color: #fff; }
 .btn.danger:hover { background: #dc2626; border-color: #dc2626; }
+.only-m { display: none; } /* 仅手机端显示，见底部 640px 媒体查询 */
 
 /* 删除确认弹层 */
 .del-confirm { text-align: center; padding: 8px 0 4px; }
@@ -179,7 +180,8 @@ input, select, textarea { font-family: inherit; font-size: 14px; }
   border-radius: 99px; padding: 2px 10px;
 }
 
-.my-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }.my-card {
+.my-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
+.my-card {
   background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
   padding: 16px; box-shadow: var(--shadow);
   display: flex; flex-direction: column; gap: 8px; text-align: left;
@@ -520,7 +522,91 @@ input, select, textarea { font-family: inherit; font-size: 14px; }
 ::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
 ::-webkit-scrollbar-track { background: transparent; }
 
+/* ============ 响应式：平板（收窄侧栏） ============ */
 @media (max-width: 900px) {
   .palette { width: 180px; }
   .prop { width: 220px; }
+}
+
+/* ============ 响应式：手机 ============ */
+@media (max-width: 640px) {
+  /* 手机浏览器地址栏高度会变，用 dvh 更稳 */
+  #app { height: 100vh; height: 100dvh; }
+
+  .only-m { display: inline-flex; }
+
+  /* ---- 首页 ---- */
+  .topbar { padding: 0 10px; gap: 5px; }
+  .topbar .btn { padding: 6px 8px; font-size: 12px; white-space: nowrap; }
+  .topbar .btn.primary { padding: 7px 9px; }
+  .brand small { display: none; }
+  .brand { font-size: 0; gap: 0; } /* 只留 Logo，避免占宽 */
+  .brand-logo { width: 28px; height: 28px; }
+
+  .hero { padding: 30px 16px 22px; }
+  .hero h1 { font-size: 21px; line-height: 1.45; }
+  .hero p { font-size: 13px; margin-top: 8px; }
+  .hero-actions { flex-wrap: wrap; justify-content: center; }
+  .hero-hint { font-size: 11px; }
+
+  .section { padding: 4px 14px 36px; }
+  .section-head { margin: 20px 0 12px; flex-wrap: wrap; gap: 4px 10px; }
+  .section-head h2 { font-size: 17px; }
+
+  .tpl-grid, .my-list { grid-template-columns: 1fr; gap: 12px; }
+  .tpl-card { padding: 14px; }
+  .tpl-flow { flex-wrap: wrap; }
+
+  .ladder { grid-template-columns: 1fr; gap: 12px; }
+  .ladder-card { padding: 14px; }
+
+  .my-card .ops .btn { flex: 1; text-align: center; justify-content: center; }
+
+  /* ---- 编辑器 ---- */
+  .ed-toolbar {
+    height: auto; flex-wrap: wrap;
+    padding: 8px 10px; gap: 6px;
+  }
+  .ed-toolbar .wf-name { flex: 1 1 90px; min-width: 0; font-size: 14px; padding: 5px 8px; }
+  .ed-toolbar .btn { padding: 6px 9px; font-size: 12px; }
+  .ed-toolbar .btn.ghost { padding: 6px 8px; }
+  .ed-toolbar .spacer { display: none; }
+  .save-hint { display: none; }
+  .live-chip { font-size: 11px; padding: 4px 8px; }
+
+  /* 节点库 / 属性 → 底部抽屉 */
+  .palette, .prop {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 80;
+    width: auto; max-height: 66vh;
+    border: none; border-radius: 18px 18px 0 0;
+    box-shadow: 0 -10px 40px rgba(15, 23, 42, .22);
+    transform: translateY(105%); transition: transform .24s ease;
+    padding-top: 22px; padding-bottom: 20px;
+    visibility: hidden;
+  }
+  .palette.open, .prop.open { transform: none; visibility: visible; }
+  /* 顶部小抓手，示意可下滑关闭 */
+  .palette::before, .prop::before {
+    content: ''; position: absolute; top: 9px; left: 50%; transform: translateX(-50%);
+    width: 42px; height: 4px; border-radius: 99px; background: #d1d5db;
+  }
+  .palette h4:first-child { margin-top: 0; }
+  .canvas-tip { display: none; }
+
+  /* 弹层全屏化 */
+  .modal-mask { padding: 0; align-items: flex-end; }
+  .modal {
+    max-width: none; width: 100%;
+    border-radius: 18px 18px 0 0;
+    max-height: 92vh;
+  }
+  .modal-foot .btn { flex: 1; justify-content: center; }
+  .ai-input { min-height: 120px; }
+  .ai-examples { gap: 6px; }
+}
+
+/* 超小屏（iPhone SE 等）再收紧一档 */
+@media (max-width: 380px) {
+  .hero h1 { font-size: 19px; }
+  .ed-toolbar .btn { padding: 6px 7px; font-size: 11px; }
 }

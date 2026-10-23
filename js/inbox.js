@@ -9,8 +9,10 @@
   if (typeof module !== 'undefined' && module.exports) module.exports = XF;
 
   const KEY = 'xiaoflow.inbox.port';
+  const HOST_KEY = 'xiaoflow.inbox.host';
   const DEF_PORT = 8787;
   let memoryPort = null; // 无 localStorage 环境（Node 测试）的回退
+  let memoryHost = null;
 
   function getPort() {
     try {
@@ -31,6 +33,48 @@
     return n;
   }
 
+  /**
+   * 投递服务的主机地址。规则：
+   *  · 设置里填了就用填的（高级用户）
+   *  · 否则：从 http(s) 页面访问时（如手机连 WiFi 开 192.168.x.x）自动用当前页面的主机名
+   *  · file:// 直接打开时用 127.0.0.1
+   * 这样手机打开小流时，投递箱自动连到电脑上，无需任何配置。
+   */
+  function getHost() {
+    try {
+      const ls = (typeof localStorage !== 'undefined') ? localStorage : null;
+      const saved = ls ? ls.getItem(HOST_KEY) : memoryHost;
+      if (saved && saved.trim()) return saved.trim();
+    } catch (e) { /* 忽略 */ }
+    try {
+      const loc = (typeof location !== 'undefined') ? location : null;
+      if (loc && /^https?:$/.test(loc.protocol) && loc.hostname &&
+          loc.hostname !== 'localhost' && loc.hostname !== '127.0.0.1') {
+        return loc.hostname;
+      }
+    } catch (e) { /* 忽略 */ }
+    return '127.0.0.1';
+  }
+  function setHost(h) {
+    const v = (h || '').trim();
+    memoryHost = v || null;
+    try {
+      const ls = (typeof localStorage !== 'undefined') ? localStorage : null;
+      if (ls) {
+        if (v) ls.setItem(HOST_KEY, v);
+        else ls.removeItem(HOST_KEY);
+      }
+    } catch (e) { /* 忽略写入失败 */ }
+    return v;
+  }
+  /** 用户显式设置过的主机（未设置过返回空串，设置框据此显示占位符） */
+  function getSavedHost() {
+    try {
+      const ls = (typeof localStorage !== 'undefined') ? localStorage : null;
+      return (ls ? ls.getItem(HOST_KEY) : memoryHost) || '';
+    } catch (e) { return ''; }
+  }
+
   function fmtTime(ts) {
     const d = new Date(ts);
     const p = n => String(n).padStart(2, '0');
@@ -42,7 +86,10 @@
     get DEF_PORT() { return DEF_PORT; },
     getPort,
     setPort,
-    base() { return 'http://127.0.0.1:' + getPort(); },
+    getHost,
+    setHost,
+    getSavedHost,
+    base() { return 'http://' + getHost() + ':' + getPort(); },
     /** 拉取待扔列表（最新在前）。服务没开会抛错 */
     async list() {
       if (typeof fetch !== 'function') throw new Error('当前环境不支持网络请求');
