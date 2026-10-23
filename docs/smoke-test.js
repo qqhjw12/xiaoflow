@@ -1,11 +1,12 @@
-/* 小流 XiaoFlow — 逻辑冒烟测试（Node 环境，不依赖浏览器） */
-const XF = require('D:/personalization/js/data.js');
-require('D:/personalization/js/ai.js');
-require('D:/personalization/js/runner.js');
-require('D:/personalization/js/store.js');
-require('D:/personalization/js/notify.js');
-require('D:/personalization/js/ollama.js');
-require('D:/personalization/js/scheduler.js');
+/* 小流 XiaoFlow — 逻辑冒烟测试（Node 环境，不依赖浏览器）
+ * 用法：node docs/smoke-test.js */
+const XF = require('../js/data.js');
+require('../js/ai.js');
+require('../js/runner.js');
+require('../js/store.js');
+require('../js/notify.js');
+require('../js/ollama.js');
+require('../js/scheduler.js');
 
 let pass = 0, fail = 0;
 function check(name, cond, extra) {

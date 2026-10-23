@@ -13,8 +13,11 @@ automatisch（14k⭐）等优秀开源项目的设计，**面向普通人**重�
 **零安装、零依赖、零构建** —— 双击 `index.html` 就能用（推荐 Edge / Chrome）。
 
 ```bash
-# 或者用本地服务器打开（体验更佳）
-cd D:\personalization
+# 克隆到本地
+git clone https://github.com/qqhjw12/xiaoflow.git
+cd xiaoflow
+
+# 或用本地服务器打开（体验更佳，避开个别浏览器的 file:// 限制）
 python -m http.server 8000
 # 浏览器访问 http://localhost:8000
 ```
