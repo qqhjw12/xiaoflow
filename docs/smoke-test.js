@@ -1,5 +1,8 @@
 /* 小流 XiaoFlow — 逻辑冒烟测试（Node 环境，不依赖浏览器）
  * 用法：node docs/smoke-test.js */
+// 公网投喂箱数据已存云端数据库；测试收尾要用清空令牌清理云端测试数据，
+// 该值须与云端 inbox_config.clear_token 一致（云服务接入时已播种）
+process.env.CLEAR_TOKEN = 'smoke-test-token';
 const XF = require('../js/data.js');
 require('../js/ai.js');
 require('../js/runner.js');
@@ -222,30 +225,56 @@ function check(name, cond, extra) {
   check('清空后恢复自动判断', XF.inbox.getHost() === '127.0.0.1' && XF.inbox.getSavedHost() === '');
   delete global.location;
 
-  console.log('== 10. 公网投喂箱（公开收集箱） ==');
+  console.log('== 10. 公网投喂箱（公开收集箱，云数据库） ==');
   const pub = publicInbox.inbox;
-  pub.clear('whatever-check'); // 无令牌时是 no-op 拒绝，先确保起点干净
+  await pub.clear('whatever-check'); // 令牌不对 = no-op 拒绝，先确保起点干净
+  // 正确令牌清场：让下面的计数断言不受历史数据影响（测试专用令牌）
+  const startClean = await pub.clear('smoke-test-token');
+  check('正确令牌可清场（测试起点归零）', startClean.ok && (await pub.count()) === 0, startClean.error || ('剩余 ' + (await pub.count())));
   // 正常投喂
-  const d1 = pub.drop('今天修好了三个 bug', 'public-web', 'ip-a');
+  const d1 = await pub.drop('今天修好了三个 bug', 'public-web', 'ip-a');
   check('公网箱正常投喂', d1.ok && d1.total >= 1 && d1.item.text === '今天修好了三个 bug');
-  check('公网箱列表最新在前', pub.list()[0].text === '今天修好了三个 bug');
+  check('公网箱列表最新在前', (await pub.list())[0].text === '今天修好了三个 bug');
   // 空内容
-  check('空内容被拒绝', !pub.drop('   ', 'web', 'ip-a').ok);
+  check('空内容被拒绝', !(await pub.drop('   ', 'web', 'ip-a')).ok);
   // 超长
   const long = '啊'.repeat(publicInbox.MAX_LEN + 1);
-  check('超过 500 字被拒绝', !pub.drop(long, 'web', 'ip-a').ok);
+  check('超过 500 字被拒绝', !(await pub.drop(long, 'web', 'ip-a')).ok);
   // 限流（同 IP 30 秒内第二条）
-  const d2 = pub.drop('紧接着再扔一条', 'web', 'ip-a');
+  const d2 = await pub.drop('紧接着再扔一条', 'web', 'ip-a');
   check('同 IP 30 秒内限流', !d2.ok && /频繁/.test(d2.error || ''), d2.error);
   // 不同 IP 不受影响
-  check('不同 IP 不受限流影响', pub.drop('另一台设备的投喂', 'web', 'ip-b').ok);
-  // 未配令牌时清空被拒
-  check('未配令牌时清空被拒', !pub.clear('').ok && !pub.clear('guess').ok);
-  // FIFO 淘汰：不同 IP 连续投喂超过 MAX_ITEMS 条
-  for (let i = 0; i < publicInbox.MAX_ITEMS + 5; i++) pub.drop('批量-' + i, 'web', 'bulk-' + i);
-  check('总量封顶 ' + publicInbox.MAX_ITEMS + ' 条（FIFO）', pub.count() === publicInbox.MAX_ITEMS, '实际 ' + pub.count());
-  check('最旧的被淘汰', !pub.list().some(x => x.text === '批量-0') && pub.list().some(x => x.text === '批量-' + (publicInbox.MAX_ITEMS + 4)));
-  pub.clear('x'); pub.clear('x'); // 拒绝即可，数据保持（无令牌无法清）
+  check('不同 IP 不受限流影响', (await pub.drop('另一台设备的投喂', 'web', 'ip-b')).ok);
+  // 错误令牌时清空被拒
+  check('错误令牌时清空被拒', !(await pub.clear('')).ok && !(await pub.clear('guess')).ok);
+  // FIFO 淘汰：先一次批量播种 MAX_ITEMS 条（bulk 插入只需一次云端往返），
+  // 再连续投喂验证「封顶 + 最旧被淘汰 + 最新在墙上」
+  const cloudClient = require('../deploy/public-inbox/cloud.js');
+  async function seedBulk(n, tag) {
+    const rows = [];
+    for (let i = 1; i <= n; i++) rows.push({ text: tag + '-' + i, source: 'smoke-bulk' });
+    const r = await cloudClient.database.from('inbox_items').insert(rows).select();
+    if (!r.success) throw new Error(r.error ? r.error.message : 'bulk seed failed');
+    return (r.data || []).length;
+  }
+  // 播种前再清一次场：墙上只剩这批 bulk，计数断言才确定
+  const preSeed = await pub.clear('smoke-test-token');
+  check('FIFO 前清场归零', preSeed.ok && (await pub.count()) === 0, preSeed.error || ('剩余 ' + (await pub.count())));
+  await seedBulk(publicInbox.MAX_ITEMS, 'bulk');
+  check('批量播种 ' + publicInbox.MAX_ITEMS + ' 条', (await pub.count()) === publicInbox.MAX_ITEMS, '实际 ' + (await pub.count()));
+  const dEvict = await pub.drop('淘汰验证-最新', 'web', 'ip-evict');
+  check('超量投喂后仍封顶 ' + publicInbox.MAX_ITEMS + ' 条', dEvict.ok && (await pub.count()) === publicInbox.MAX_ITEMS, '实际 ' + (await pub.count()));
+  const wallNow = await pub.list();
+  check('最旧的一条被淘汰', !wallNow.some(x => x.text === 'bulk-1') && wallNow.some(x => x.text === 'bulk-' + publicInbox.MAX_ITEMS), '现有 ' + wallNow.length + ' 条');
+  check('最新投喂排在墙上第一条', wallNow[0].text === '淘汰验证-最新');
+  // 再连续投喂几条，确认持续封顶且逐批淘汰最旧的（bulk 行）
+  for (let i = 0; i < 5; i++) await pub.drop('连投-' + i, 'web', 'ip-evict-' + i);
+  check('连续投喂后依然封顶', (await pub.count()) === publicInbox.MAX_ITEMS, '实际 ' + (await pub.count()));
+  const wallNow2 = await pub.list();
+  check('最旧的 bulk 行逐批被淘汰', !wallNow2.some(x => x.text === 'bulk-1') && !wallNow2.some(x => x.text === 'bulk-6') && wallNow2.some(x => x.text === 'bulk-7'));
+  check('连投批次全部在墙上', ['连投-0', '连投-1', '连投-2', '连投-3', '连投-4'].every(t => wallNow2.some(x => x.text === t)), '缺少连投条目');
+  check('最新一条排在最前', wallNow2[0].text === '连投-4', wallNow2[0] && wallNow2[0].text);
+  await pub.clear('x'); await pub.clear('x'); // 令牌不对，拒绝即可，数据保持
   // HTTP 层：真实起服务
   const pubServer = publicInbox.start(0);
   await new Promise(r => pubServer.once('listening', r));
@@ -269,10 +298,47 @@ function check(name, cond, extra) {
   check('公网箱无令牌清空 HTTP 403', pr.status === 403 && !pr.json.ok);
   pr = await pubApi('/nope');
   check('未知路径 404', pr.status === 404);
+
+  console.log('== 11. 投喂墙点赞（云数据库） ==');
+  const dLike = await pub.drop('点赞功能冒烟', 'liketest', 'ip-like');
+  check('点赞载体投喂成功', dLike.ok, dLike.error);
+  if (dLike.ok) {
+    const itemId = dLike.item.id;
+    const visitor = 'smoke-visitor';
+    const lk1 = await pub.toggleLike(itemId, visitor, 'ip-like-1');
+    check('点赞后 liked=true 且计数为 1', lk1.ok && lk1.liked === true && lk1.count === 1, JSON.stringify(lk1));
+    const lk2 = await pub.toggleLike(itemId, visitor, 'ip-like-2');
+    check('同一访客再点一次取消点赞', lk2.ok && lk2.liked === false && lk2.count === 0, JSON.stringify(lk2));
+    const lk3 = await pub.toggleLike(itemId, 'smoke-visitor-2', 'ip-like-3');
+    check('另一访客点赞计数为 1', lk3.ok && lk3.liked === true && lk3.count === 1, JSON.stringify(lk3));
+    check('无效 id 被拒绝', !(await pub.toggleLike(-1, visitor, 'ip-like-4')).ok);
+    check('空访客被拒绝', !(await pub.toggleLike(itemId, '', 'ip-like-5')).ok);
+    const meta1 = await pub.likesMeta(visitor);
+    check('likesMeta：我的点赞已取消即为空', meta1.my.length === 0, JSON.stringify(meta1.my));
+    const meta2 = await pub.likesMeta('smoke-visitor-2');
+    check('likesMeta：返回另一访客的点赞', meta2.my.length === 1 && meta2.my[0] === itemId, JSON.stringify(meta2.my));
+    check('likesMeta：返回各条点赞计数', meta2.counts[itemId] === 1, JSON.stringify(meta2.counts));
+    // 同 IP 连续两次点赞：第二次应被限流（节流窗口 1 秒）。
+    // 注意第一个调用不被限流、会真实点赞（race-visitor），所以放在计数断言之后测，
+    // 它对计数的影响在后面 HTTP 断言的期望值里体现。
+    const race = pub.toggleLike(itemId, 'race-visitor', 'ip-race'); // 先置节流时间戳（同步）
+    const raced = await pub.toggleLike(itemId, 'race-visitor', 'ip-race');
+    await race;
+    check('同 IP 1 秒内连续点赞被限流', !raced.ok && raced.code === 'ratelimit', JSON.stringify(raced));
+    // HTTP 层点赞（race-visitor 已点上，计数从 1 变 2，再算 http-visitor 这条 → 3）
+    pr = await pubApi('/api/like', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: itemId, visitor: 'http-visitor' }) });
+    check('HTTP 点赞成功', pr.status === 200 && pr.json.ok && pr.json.liked === true && pr.json.count === 3, JSON.stringify(pr.json));
+    pr = await pubApi('/api/like', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: 'abc', visitor: 'http-visitor' }) });
+    check('HTTP 无效 id 返回 400', pr.status === 400 && !pr.json.ok);
+  }
   pubServer.close();
+  // 云端测试数据清理：正确令牌清空（服务器 CLEAR_TOKEN 与数据库 clear_token 须为同一值）
+  const cleaned = await pub.clear('smoke-test-token');
+  check('测试后云端数据已清空', cleaned.ok && (await pub.count()) === 0, cleaned.error || ('剩余 ' + (await pub.count()) + ' 条'));
   // 页面渲染不含未转义的用户输入（防 XSS）：列表里 <script> 必须被转义
   const pageHtml = publicInbox.page();
   check('投喂墙页面含转义函数', pageHtml.includes('&lt;') || pageHtml.includes('esc('));
+  check('投喂墙页面含搜索 / 排序 / 点赞等新功能', pageHtml.includes('id="q"') && pageHtml.includes('sortNew') && pageHtml.includes('api/like'), '功能标识缺失');
 
   console.log(`\n结果：${pass} 通过，${fail} 失败`);
   process.exit(fail ? 1 : 0);
