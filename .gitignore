@@ -14,6 +14,7 @@ docs/verify-*.html
 
 # 运行时数据（投递箱内容，本地私有）
 data/
+deploy/*/data/
 
 # 依赖（本项目零依赖，防御性忽略）
 node_modules/

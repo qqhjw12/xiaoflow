@@ -1,0 +1,11 @@
+{
+  "name": "xiaoflow-public-inbox",
+  "version": "1.0.0",
+  "description": "小流 XiaoFlow — 公网投喂箱：让任何人给这个工作流智能体投喂内容",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "license": "MIT",
+  "private": true
+}

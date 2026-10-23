@@ -724,14 +724,19 @@
       box.appendChild(foot);
       mask.querySelector('#inbox-take').onclick = async () => {
         pendingInbox = inbox.mergeText(items);
-        await inbox.clear();
+        // 公网投喂墙是只读的（清空需令牌），clear 失败不影响带入
+        try { await inbox.clear(); } catch (e) { /* 只读墙，跳过清空 */ }
         toast(`✓ 已带入 ${items.length} 条投递，去点「试运行」吧`);
         close();
       };
       mask.querySelector('#inbox-clear').onclick = async () => {
-        await inbox.clear();
-        toast('投递箱已清空');
-        render();
+        try {
+          await inbox.clear();
+          toast('投递箱已清空');
+          render();
+        } catch (e) {
+          toast('这个投递箱是只读的（公网投喂墙），内容会一直留着给大家看');
+        }
       };
     };
     render();

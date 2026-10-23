@@ -8,6 +8,7 @@ require('../js/notify.js');
 require('../js/ollama.js');
 require('../js/scheduler.js');
 require('../js/inbox.js');
+const publicInbox = require('../deploy/public-inbox/server.js');
 
 let pass = 0, fail = 0;
 function check(name, cond, extra) {
@@ -220,6 +221,58 @@ function check(name, cond, extra) {
   XF.inbox.setHost('');
   check('清空后恢复自动判断', XF.inbox.getHost() === '127.0.0.1' && XF.inbox.getSavedHost() === '');
   delete global.location;
+
+  console.log('== 10. 公网投喂箱（公开收集箱） ==');
+  const pub = publicInbox.inbox;
+  pub.clear('whatever-check'); // 无令牌时是 no-op 拒绝，先确保起点干净
+  // 正常投喂
+  const d1 = pub.drop('今天修好了三个 bug', 'public-web', 'ip-a');
+  check('公网箱正常投喂', d1.ok && d1.total >= 1 && d1.item.text === '今天修好了三个 bug');
+  check('公网箱列表最新在前', pub.list()[0].text === '今天修好了三个 bug');
+  // 空内容
+  check('空内容被拒绝', !pub.drop('   ', 'web', 'ip-a').ok);
+  // 超长
+  const long = '啊'.repeat(publicInbox.MAX_LEN + 1);
+  check('超过 500 字被拒绝', !pub.drop(long, 'web', 'ip-a').ok);
+  // 限流（同 IP 30 秒内第二条）
+  const d2 = pub.drop('紧接着再扔一条', 'web', 'ip-a');
+  check('同 IP 30 秒内限流', !d2.ok && /频繁/.test(d2.error || ''), d2.error);
+  // 不同 IP 不受影响
+  check('不同 IP 不受限流影响', pub.drop('另一台设备的投喂', 'web', 'ip-b').ok);
+  // 未配令牌时清空被拒
+  check('未配令牌时清空被拒', !pub.clear('').ok && !pub.clear('guess').ok);
+  // FIFO 淘汰：不同 IP 连续投喂超过 MAX_ITEMS 条
+  for (let i = 0; i < publicInbox.MAX_ITEMS + 5; i++) pub.drop('批量-' + i, 'web', 'bulk-' + i);
+  check('总量封顶 ' + publicInbox.MAX_ITEMS + ' 条（FIFO）', pub.count() === publicInbox.MAX_ITEMS, '实际 ' + pub.count());
+  check('最旧的被淘汰', !pub.list().some(x => x.text === '批量-0') && pub.list().some(x => x.text === '批量-' + (publicInbox.MAX_ITEMS + 4)));
+  pub.clear('x'); pub.clear('x'); // 拒绝即可，数据保持（无令牌无法清）
+  // HTTP 层：真实起服务
+  const pubServer = publicInbox.start(0);
+  await new Promise(r => pubServer.once('listening', r));
+  const pubPort = pubServer.address().port;
+  const pubApi = async (path, opts) => {
+    const r = await fetch('http://127.0.0.1:' + pubPort + path, opts);
+    const text = await r.text();
+    let json = null;
+    try { json = JSON.parse(text); } catch (e) { /* 非 JSON（如 HTML） */ }
+    return { status: r.status, json, text };
+  };
+  let pr = await pubApi('/');
+  check('公网箱首页可访问', pr.status === 200 && pr.text.includes('给小流投喂') && pr.text.includes('公开'));
+  pr = await pubApi('/api/inbox');
+  check('公网箱 /api/inbox 返回列表', pr.status === 200 && pr.json.ok && Array.isArray(pr.json.items));
+  pr = await pubApi('/api/drop', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: 'HTTP 投喂测试', source: 'test' }) });
+  check('公网箱 /api/drop 投喂成功', pr.status === 200 && pr.json.ok);
+  pr = await pubApi('/api/drop', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: '' }) });
+  check('公网箱空内容 HTTP 429', pr.status === 429 && !pr.json.ok);
+  pr = await pubApi('/api/clear', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+  check('公网箱无令牌清空 HTTP 403', pr.status === 403 && !pr.json.ok);
+  pr = await pubApi('/nope');
+  check('未知路径 404', pr.status === 404);
+  pubServer.close();
+  // 页面渲染不含未转义的用户输入（防 XSS）：列表里 <script> 必须被转义
+  const pageHtml = publicInbox.page();
+  check('投喂墙页面含转义函数', pageHtml.includes('&lt;') || pageHtml.includes('esc('));
 
   console.log(`\n结果：${pass} 通过，${fail} 失败`);
   process.exit(fail ? 1 : 0);
