@@ -85,6 +85,14 @@ input, select, textarea { font-family: inherit; font-size: 14px; }
 .btn.block { width: 100%; justify-content: center; }
 .btn.lg { padding: 12px 24px; font-size: 15px; border-radius: 12px; }
 .btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn.danger { background: #ef4444; border-color: #ef4444; color: #fff; }
+.btn.danger:hover { background: #dc2626; border-color: #dc2626; }
+
+/* 删除确认弹层 */
+.del-confirm { text-align: center; padding: 8px 0 4px; }
+.del-confirm .del-icon { font-size: 44px; line-height: 1; }
+.del-confirm .del-name { font-size: 16px; font-weight: 600; margin-top: 12px; }
+.del-confirm .del-warn { font-size: 13px; color: var(--muted); margin-top: 8px; line-height: 1.7; }
 
 /* ============ 首页 ============ */
 .home { flex: 1; overflow-y: auto; }

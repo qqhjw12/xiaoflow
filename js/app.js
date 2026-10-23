@@ -178,11 +178,13 @@
       card.querySelector('[data-act="open"]').onclick = () => { location.hash = '#/edit/' + id; };
       card.querySelector('[data-act="export"]').onclick = () => exportWF(store.get(id));
       card.querySelector('[data-act="del"]').onclick = () => {
-        if (confirm('确定删除「' + store.get(id).name + '」吗？删掉就找不回来了。')) {
+        const wf = store.get(id);
+        if (!wf) { toast('这个小流程已经不见了'); route(); return; }
+        confirmDelete(wf, () => {
           store.remove(id);
           toast('已删除');
           route();
-        }
+        });
       };
     });
   }
@@ -408,6 +410,37 @@
       inbox.setPort(mask.querySelector('#set-inbox-port').value);
       close();
       toast(ollama.ready() ? '✓ 已保存，AI 节点会优先用本机模型' : '已保存（本机 AI 未启用，继续用模拟回答）');
+    };
+  }
+
+  /* ---------- 删除确认（自定义模态，不依赖浏览器 confirm，
+     保证在预览面板 iframe 等环境里也能正常使用） ---------- */
+  function confirmDelete(wf, onOk) {
+    const mask = document.createElement('div');
+    mask.className = 'modal-mask';
+    mask.innerHTML = `
+      <div class="modal" style="max-width:400px">
+        <div class="modal-head"><span>🗑</span><h3>删除小流程</h3><button class="x">✕</button></div>
+        <div class="modal-body">
+          <div class="del-confirm">
+            <div class="del-icon">${wf.icon || '🌱'}</div>
+            <p class="del-name">「${esc(wf.name || '未命名小流程')}」</p>
+            <p class="del-warn">删掉就找不回来了。<br>建议先「导出」留个备份。</p>
+          </div>
+        </div>
+        <div class="modal-foot">
+          <button class="btn" id="del-cancel">取消</button>
+          <button class="btn danger" id="del-ok">确认删除</button>
+        </div>
+      </div>`;
+    document.body.appendChild(mask);
+    const close = () => mask.remove();
+    mask.querySelector('.x').onclick = close;
+    mask.querySelector('#del-cancel').onclick = close;
+    mask.addEventListener('pointerdown', e => { if (e.target === mask) close(); });
+    mask.querySelector('#del-ok').onclick = () => {
+      close();
+      onOk && onOk();
     };
   }
 
